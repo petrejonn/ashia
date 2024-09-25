@@ -159,10 +159,9 @@ type CreateCategorySuccess struct {
 func (CreateCategorySuccess) IsCreateCategoryPayload() {}
 
 type CreateProductInput struct {
-	CategoryID  string  `json:"categoryID"`
-	Title       string  `json:"title"`
-	Price       float64 `json:"price"`
-	Description string  `json:"description"`
+	CategoryID  string `json:"categoryID"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type CreateProductSuccess struct {
@@ -240,9 +239,7 @@ type PhoneNumberInput struct {
 
 type Product struct {
 	ID                string                     `json:"id"`
-	Slug              string                     `json:"slug"`
 	Title             string                     `json:"title"`
-	Price             float64                    `json:"price"`
 	Description       string                     `json:"description"`
 	Category          *Category                  `json:"category"`
 	DefaultVariant    *ProductVariant            `json:"defaultVariant"`
@@ -297,26 +294,27 @@ type Query struct {
 }
 
 type Shop struct {
-	ID                   string             `json:"id"`
-	Title                string             `json:"title"`
-	DefaultDomain        string             `json:"defaultDomain"`
-	ContactPhone         *PhoneNumber       `json:"contactPhone,omitempty"`
-	ContactEmail         *string            `json:"contactEmail,omitempty"`
-	Address              *ShopAddress       `json:"address,omitempty"`
-	Products             *ProductConnection `json:"products,omitempty"`
-	WhatsApp             *WhatsApp          `json:"whatsApp,omitempty"`
-	Facebook             *Facebook          `json:"facebook,omitempty"`
-	Images               *ShopImages        `json:"images,omitempty"`
-	CurrencyCode         string             `json:"currencyCode"`
-	Status               ShopStatus         `json:"status"`
-	About                *string            `json:"about,omitempty"`
-	ShopProductsCategory *string            `json:"shopProductsCategory,omitempty"`
-	SeoDescription       *string            `json:"seoDescription,omitempty"`
-	SeoKeywords          []string           `json:"seoKeywords"`
-	SeoTitle             *string            `json:"seoTitle,omitempty"`
-	UpdatedAt            time.Time          `json:"updatedAt"`
-	CreatedAt            time.Time          `json:"createdAt"`
-	Owner                *User              `json:"owner"`
+	ID                   string              `json:"id"`
+	Title                string              `json:"title"`
+	DefaultDomain        string              `json:"defaultDomain"`
+	ContactPhone         *PhoneNumber        `json:"contactPhone,omitempty"`
+	ContactEmail         *string             `json:"contactEmail,omitempty"`
+	Address              *ShopAddress        `json:"address,omitempty"`
+	Products             *ProductConnection  `json:"products,omitempty"`
+	Categories           *CategoryConnection `json:"categories,omitempty"`
+	WhatsApp             *WhatsApp           `json:"whatsApp,omitempty"`
+	Facebook             *Facebook           `json:"facebook,omitempty"`
+	Images               *ShopImages         `json:"images,omitempty"`
+	CurrencyCode         string              `json:"currencyCode"`
+	Status               ShopStatus          `json:"status"`
+	About                *string             `json:"about,omitempty"`
+	ShopProductsCategory *string             `json:"shopProductsCategory,omitempty"`
+	SeoDescription       *string             `json:"seoDescription,omitempty"`
+	SeoKeywords          []string            `json:"seoKeywords"`
+	SeoTitle             *string             `json:"seoTitle,omitempty"`
+	UpdatedAt            time.Time           `json:"updatedAt"`
+	CreatedAt            time.Time           `json:"createdAt"`
+	Owner                *User               `json:"owner"`
 }
 
 func (Shop) IsNode()            {}

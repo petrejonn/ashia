@@ -25,20 +25,14 @@ func (r *categoryResolver) ID(ctx context.Context, obj *model.Category) (string,
 
 // CreateCategory is the resolver for the createCategory field.
 func (r *mutationResolver) CreateCategory(ctx context.Context, category model.CreateCategoryInput) (model.CreateCategoryPayload, error) {
-	host, ok := ctx.Value("shopHost").(string)
-	if !ok {
-		return nil, errors.New("host not found")
-	}
-	shop, err := r.Repository.GetShopByDomain(ctx, host)
-	if err != nil {
-		return nil, errors.New("could not find shop")
-	}
+	shopID := ctx.Value("shop_id").(int64)
 	param := db.CreateShopCategoryParams{
 		Title:       category.Title,
 		Description: pgtype.Text{String: category.Description, Valid: true},
 		Slug:        slug.MakeLang(category.Title, "en"),
-		ShopID:      shop.ShopID,
+		ShopID:      shopID,
 	}
+	param.CategoryAttributes = []byte("{}")
 	if category.ParentID != nil {
 		_, id, err := DecodeRelayID(*category.ParentID)
 		if err != nil {
@@ -181,15 +175,7 @@ func (r *mutationResolver) DeleteCategoryAttribute(ctx context.Context, category
 
 // Categories is the resolver for the categories field.
 func (r *queryResolver) Categories(ctx context.Context) ([]model.Category, error) {
-	host, ok := ctx.Value("shopHost").(string)
-	if !ok {
-		return nil, errors.New("host not found")
-	}
-	shop, err := r.Repository.GetShopByDomain(ctx, host)
-	if err != nil {
-		return nil, errors.New("could not find shop")
-	}
-	categoriesDB, err := r.Repository.GetShopCategories(ctx, shop.ShopID)
+	categoriesDB, err := r.Repository.GetShopCategories(ctx)
 	if err != nil {
 		return nil, errors.New("could not fetch categories")
 	}
