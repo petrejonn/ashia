@@ -94,7 +94,37 @@ models:
     fields:
       id:
         resolver: true
+      children:
+        resolver: true
+      products:
+        resolver: true
+      allowedAttributes:
+        resolver: true
+      images:
+        resolver: true
+  Product:
+    fields:
+      id:
+        resolver: true
+      defaultVariant:
+        resolver: true
+      variants:
+        resolver: true
+      allowedAttributes:
+        resolver: true
+      images:
+        resolver: true
   Shop:
     fields:
       id:
         resolver: true
+      categories:
+        resolver: true
+      products:
+        resolver: true
+      images:
+        resolver: true
+      whatsApp:
+        resolver: true
+      facebook:
+        resolver: true   

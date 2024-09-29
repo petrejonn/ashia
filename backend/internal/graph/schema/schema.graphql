@@ -16,6 +16,10 @@ type Image {
   url: String!
   altText: String
 }
+input ImageInput {
+  url: String!
+  altText: String
+}
 
 type Query {
   node(id: ID!): Node
@@ -24,10 +28,10 @@ type Mutation {
   signInUser(input: SignInInput!): SignInUserPayload!
 }
 type PageInfo {
-  endCursor: String
+  startCursor: ID!
+  endCursor: ID!
   hasNextPage: Boolean!
   hasPreviousPage: Boolean!
-  startCursor: String
 }
 interface UserError {
   message: String!

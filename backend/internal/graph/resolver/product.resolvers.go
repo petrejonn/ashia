@@ -12,17 +12,18 @@ import (
 	"strconv"
 
 	"github.com/petrejonn/naytife/internal/db"
+	"github.com/petrejonn/naytife/internal/graph/generated"
 	"github.com/petrejonn/naytife/internal/graph/model"
 )
 
 // CreateProduct is the resolver for the createProduct field.
 func (r *mutationResolver) CreateProduct(ctx context.Context, product model.CreateProductInput) (model.CreateProductPayload, error) {
 	shopID := ctx.Value("shop_id").(int64)
-	_, catID, err := DecodeRelayID(*&product.CategoryID)
+	_, catID, err := DecodeRelayID(product.CategoryID)
 	if err != nil {
 		return nil, errors.New("invalid category ID")
 	}
-	cat, err := r.Repository.GetShopCategory(ctx, *catID)
+	cat, err := r.Repository.GetCategory(ctx, db.GetCategoryParams{ShopID: shopID, CategoryID: *catID})
 	if err != nil {
 		return &model.CategoryNotFoundError{Message: "category not found", Code: model.ErrorCodeNotFoundCategory}, nil
 	}
@@ -54,34 +55,140 @@ func (r *mutationResolver) CreateProduct(ctx context.Context, product model.Crea
 	}}, nil
 }
 
-// Products is the resolver for the products field.
-func (r *queryResolver) Products(ctx context.Context) ([]model.Product, error) {
-	productsDB, err := r.Repository.GetProducts(ctx)
+// UpdateProduct is the resolver for the updateProduct field.
+func (r *mutationResolver) UpdateProduct(ctx context.Context, productID string, product model.UpdateProductInput) (model.UpdateProductPayload, error) {
+	panic(fmt.Errorf("not implemented: UpdateProduct - updateProduct"))
+}
+
+// CreateProductAttribute is the resolver for the createProductAttribute field.
+func (r *mutationResolver) CreateProductAttribute(ctx context.Context, productID string, attribute model.CreateProductAttributeInput) (model.CreateProductAttributePayload, error) {
+	panic(fmt.Errorf("not implemented: CreateProductAttribute - createProductAttribute"))
+}
+
+// DeleteProductAttribute is the resolver for the deleteProductAttribute field.
+func (r *mutationResolver) DeleteProductAttribute(ctx context.Context, productID string, attribute string) (model.DeleteCategoryAttributePayload, error) {
+	panic(fmt.Errorf("not implemented: DeleteProductAttribute - deleteProductAttribute"))
+}
+
+// ID is the resolver for the id field.
+func (r *productResolver) ID(ctx context.Context, obj *model.Product) (string, error) {
+	return EncodeRelayID("Product", obj.ID), nil
+}
+
+// DefaultVariant is the resolver for the defaultVariant field.
+func (r *productResolver) DefaultVariant(ctx context.Context, obj *model.Product) (*model.ProductVariant, error) {
+	panic(fmt.Errorf("not implemented: DefaultVariant - defaultVariant"))
+}
+
+// Variants is the resolver for the variants field.
+func (r *productResolver) Variants(ctx context.Context, obj *model.Product) ([]model.ProductVariant, error) {
+	panic(fmt.Errorf("not implemented: Variants - variants"))
+}
+
+// AllowedAttributes is the resolver for the allowedAttributes field.
+func (r *productResolver) AllowedAttributes(ctx context.Context, obj *model.Product) ([]model.AllowedProductAttributes, error) {
+	objID, err := strconv.Atoi(obj.ID)
 	if err != nil {
-		log.Println(err)
-		return nil, errors.New("server error")
+		return nil, errors.New("invalid product id")
 	}
-	products := make([]model.Product, 0, len(productsDB))
-	for _, productDB := range productsDB {
-		attributes, err := unmarshalAllowedProductAttributes(productDB.AllowedAttributes)
+	attributesDB, err := r.Repository.GetProductAllowedAttributes(ctx, int64(objID))
+	if err != nil {
+		return nil, errors.New("could not fetch product attribute")
+	}
+	attributes, err := unmarshalAllowedProductAttributes(attributesDB)
+	if err != nil {
+		return nil, errors.New("failed to get attributes")
+	}
+	return attributes, nil
+}
+
+// Images is the resolver for the images field.
+func (r *productResolver) Images(ctx context.Context, obj *model.Product) ([]model.Image, error) {
+	panic(fmt.Errorf("not implemented: Images - images"))
+}
+
+// Products is the resolver for the products field.
+func (r *queryResolver) Products(ctx context.Context, first *int, after *string) (*model.ProductConnection, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	limit := 20
+	if first != nil {
+		limit = *first
+	}
+	afterID := int64(0)
+	if after != nil {
+		decodedType, id, err := DecodeRelayID(*after)
 		if err != nil {
-			return nil, errors.New("could not understand category")
+			return nil, fmt.Errorf("invalid after cursor: %w", err)
 		}
-		products = append(products, model.Product{
-			ID:                strconv.FormatInt(productDB.ProductID, 10),
-			Title:             productDB.Title,
-			Description:       productDB.Description,
-			AllowedAttributes: attributes,
-			Status:            (*model.ProductStatus)(&productDB.Status),
-			CreatedAt:         productDB.CreatedAt.Time,
-			UpdatedAt:         productDB.UpdatedAt.Time,
-		})
+		if decodedType != "Product" {
+			return nil, fmt.Errorf("expected after cursor type 'Product', got '%s'", decodedType)
+		}
+		if id != nil {
+			afterID = *id
+		}
+	}
+	objsDB, err := r.Repository.GetProducts(ctx, db.GetProductsParams{ShopID: shopID, After: afterID, Limit: int32(limit) + 1})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch products: %w", err)
+	}
+	hasNextPage := len(objsDB) > limit
+	if hasNextPage {
+		objsDB = objsDB[:limit]
+	}
+	edges := make([]model.ProductEdge, len(objsDB))
+	for i, prod := range objsDB {
+		relayID := EncodeRelayID("Product", strconv.FormatInt(prod.ProductID, 10))
+		edges[i] = model.ProductEdge{Cursor: relayID, Node: &model.Product{
+			ID:          strconv.FormatInt(prod.ProductID, 10),
+			Title:       prod.Title,
+			Description: prod.Description,
+			CreatedAt:   prod.CreatedAt.Time,
+			UpdatedAt:   prod.UpdatedAt.Time,
+			Status:      (*model.ProductStatus)(&prod.Status),
+		}}
+	}
+	var startCursor, endCursor *string
+	if len(objsDB) > 0 {
+		firstCursor := EncodeRelayID("Product", strconv.FormatInt(objsDB[0].ProductID, 10))
+		lastCursor := EncodeRelayID("Product", strconv.FormatInt(objsDB[len(objsDB)-1].ProductID, 10))
+		startCursor, endCursor = &firstCursor, &lastCursor
 	}
 
-	return products, nil
+	pageInfo := &model.PageInfo{
+		HasNextPage: hasNextPage,
+		StartCursor: safeStringDereference(startCursor),
+		EndCursor:   safeStringDereference(endCursor),
+	}
+
+	return &model.ProductConnection{
+		Edges:      edges,
+		PageInfo:   pageInfo,
+		TotalCount: len(objsDB),
+	}, nil
 }
 
 // Product is the resolver for the product field.
 func (r *queryResolver) Product(ctx context.Context, id string) (*model.Product, error) {
-	panic(fmt.Errorf("not implemented: Product - product"))
+	shopID := ctx.Value("shop_id").(int64)
+	_, objID, err := DecodeRelayID(id)
+	if err != nil {
+		return nil, errors.New("invalid category ID")
+	}
+	objDB, err := r.Repository.GetProduct(ctx, db.GetProductParams{ShopID: shopID, ProductID: *objID})
+	if err != nil {
+		return nil, errors.New("could not find category")
+	}
+	return &model.Product{
+		ID:          strconv.FormatInt(objDB.ProductID, 10),
+		Title:       objDB.Title,
+		Description: objDB.Description,
+		Status:      (*model.ProductStatus)(&objDB.Status),
+		CreatedAt:   objDB.CreatedAt.Time,
+		UpdatedAt:   objDB.UpdatedAt.Time,
+	}, nil
 }
+
+// Product returns generated.ProductResolver implementation.
+func (r *Resolver) Product() generated.ProductResolver { return &productResolver{r} }
+
+type productResolver struct{ *Resolver }

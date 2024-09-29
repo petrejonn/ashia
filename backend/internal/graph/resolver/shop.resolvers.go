@@ -39,10 +39,6 @@ func (r *mutationResolver) CreateShop(ctx context.Context, shop model.CreateShop
 		return nil, err
 	}
 	return &model.CreateShopSuccess{Shop: &model.Shop{
-		ID: strconv.FormatInt(
-			dbShop.ShopID,
-			10,
-		),
 		CurrencyCode:  dbShop.CurrencyCode,
 		Status:        model.ShopStatus(dbShop.Status),
 		Title:         dbShop.Title,
@@ -52,13 +48,12 @@ func (r *mutationResolver) CreateShop(ctx context.Context, shop model.CreateShop
 
 // UpdateShop is the resolver for the updateShop field.
 func (r *mutationResolver) UpdateShop(ctx context.Context, shop model.UpdateShopInput) (model.UpdateShopPayload, error) {
-	// TODO: Check if user has update permission
-	host, ok := ctx.Value("shopHost").(string)
-	if !ok {
-		return nil, errors.New("host not found")
+	shopID := ctx.Value("shop_id").(int64)
+	if shop.ContactPhone != nil && !IsValidE164(shop.ContactPhone.E164) {
+		return nil, fmt.Errorf("invalid E164 phone number")
 	}
 	params := db.UpdateShopParams{
-		Domain:         host,
+		ShopID:         shopID,
 		Title:          pgTextFromStringPointer(shop.Title),        // Pass the pointer, no need to dereference here
 		CurrencyCode:   pgTextFromStringPointer(shop.CurrencyCode), // Pass the pointer
 		About:          pgTextFromStringPointer(shop.About),
@@ -66,6 +61,7 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, shop model.UpdateShop
 		SeoDescription: pgTextFromStringPointer(shop.SeoDescription),
 		Email:          pgTextFromStringPointer(shop.ContactEmail),
 		PhoneNumber:    pgTextFromStringPointer(&shop.ContactPhone.E164),
+		Address:        pgTextFromStringPointer(&shop.Address.Address),
 	}
 
 	dbShop, err := r.Repository.UpdateShop(ctx, params)
@@ -74,7 +70,6 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, shop model.UpdateShop
 		return nil, err
 	}
 	return &model.UpdateShopSuccess{Shop: &model.Shop{
-		ID:             strconv.FormatInt(dbShop.ShopID, 10),
 		CurrencyCode:   dbShop.CurrencyCode,
 		Status:         model.ShopStatus(dbShop.Status),
 		Title:          dbShop.Title,
@@ -86,31 +81,68 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, shop model.UpdateShop
 		ContactPhone: &model.PhoneNumber{
 			E164: dbShop.PhoneNumber.String,
 		},
+		Address: &model.ShopAddress{
+			Address: dbShop.Address.String,
+		},
 	}}, nil
 }
 
-// CreateWhatsApp is the resolver for the createWhatsApp field.
-func (r *mutationResolver) CreateWhatsApp(ctx context.Context, input model.CreateWhatsAppInput) (model.CreateWhatsAppPayload, error) {
-	panic(fmt.Errorf("not implemented: CreateWhatsApp - createWhatsApp"))
+// UpdateShopImages is the resolver for the updateShopImages field.
+func (r *mutationResolver) UpdateShopImages(ctx context.Context, input model.UpdateShopImagesInput) (model.UpdateShopImagesPayload, error) {
+	panic(fmt.Errorf("not implemented: UpdateShopImages - updateShopImages"))
 }
 
-// UpdateWhatsApp is the resolver for the updateWhatsApp field.
-func (r *mutationResolver) UpdateWhatsApp(ctx context.Context, input model.UpdateWhatsAppInput) (model.UpdateWhatsAppPayload, error) {
-	panic(fmt.Errorf("not implemented: UpdateWhatsApp - updateWhatsApp"))
+// UpdateShopWhatsApp is the resolver for the updateShopWhatsApp field.
+func (r *mutationResolver) UpdateShopWhatsApp(ctx context.Context, input model.UpdateShopWhatsAppInput) (model.UpdateShopWhatsAppPayload, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	if input.PhoneNumber != nil && !IsValidE164(input.PhoneNumber.E164) {
+		return nil, fmt.Errorf("invalid E164 phone number")
+	}
+	params := db.UpsertShopWhatsappParams{
+		ShopID:      shopID,
+		Url:         *input.URL,
+		PhoneNumber: input.PhoneNumber.E164,
+	}
+	objDB, err := r.Repository.UpsertShopWhatsapp(ctx, params)
+
+	if err != nil {
+		return nil, err
+	}
+	return &model.UpdateShopWhatsAppSuccess{WhatsApp: &model.WhatsApp{
+		URL: &objDB.Url,
+		PhoneNumber: &model.PhoneNumber{
+			E164: objDB.PhoneNumber,
+		},
+	}}, nil
+}
+
+// UpdateShopFacebook is the resolver for the updateShopFacebook field.
+func (r *mutationResolver) UpdateShopFacebook(ctx context.Context, input model.UpdateShopFacebookInput) (model.UpdateShopFacebookPayload, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	params := db.UpsertShopFacebookParams{
+		ShopID: shopID,
+		Url:    *input.URL,
+		Handle: *input.Handle,
+	}
+	objDB, err := r.Repository.UpsertShopFacebook(ctx, params)
+
+	if err != nil {
+		return nil, err
+	}
+	return &model.UpdateShopFacebookSuccess{Facebook: &model.Facebook{
+		URL:    &objDB.Url,
+		Handle: &objDB.Handle,
+	}}, nil
 }
 
 // Shop is the resolver for the shop field.
 func (r *queryResolver) Shop(ctx context.Context) (*model.Shop, error) {
-	host, ok := ctx.Value("shopHost").(string)
-	if !ok {
-		return nil, errors.New("host not found")
-	}
-	shop, err := r.Repository.GetShopByDomain(ctx, host)
+	shopID := ctx.Value("shop_id").(int64)
+	shop, err := r.Repository.GetShop(ctx, shopID)
 	if err != nil {
 		return nil, err
 	}
 	return &model.Shop{
-		ID:             strconv.FormatInt(shop.ShopID, 10),
 		Title:          shop.Title,
 		DefaultDomain:  shop.Domain,
 		CurrencyCode:   shop.CurrencyCode,
@@ -120,31 +152,182 @@ func (r *queryResolver) Shop(ctx context.Context) (*model.Shop, error) {
 		SeoTitle:       &shop.SeoTitle.String,
 		UpdatedAt:      shop.UpdatedAt.Time,
 		CreatedAt:      shop.CreatedAt.Time,
+		ContactEmail:   &shop.Email,
+		ContactPhone: &model.PhoneNumber{
+			E164: shop.PhoneNumber.String,
+		},
+		Address: &model.ShopAddress{
+			Address: shop.Address.String,
+		},
 	}, nil
-}
-
-// MyShops is the resolver for the myShops field.
-func (r *queryResolver) MyShops(ctx context.Context) ([]model.Shop, error) {
-	fakeAuthSub := "9vgPO5K5ipI424xe84HUrtqQJMWT3e7f@clients"
-	owner, err := r.Repository.GetUser(ctx, pgtype.Text{String: fakeAuthSub, Valid: true})
-	if err != nil {
-		return nil, err
-	}
-	shops, err := r.Repository.GetShopsByOwner(ctx, owner.UserID)
-	if err != nil {
-		return nil, err
-	}
-	shopList := make([]model.Shop, len(shops))
-	for i, shop := range shops {
-		shopList[i] = model.Shop{ID: strconv.FormatInt(shop.ShopID, 10), Title: shop.Title, Status: model.ShopStatus(shop.Status), DefaultDomain: shop.Domain, CurrencyCode: shop.CurrencyCode, About: &shop.About.String}
-	}
-	return shopList, nil
 }
 
 // ID is the resolver for the id field.
 func (r *shopResolver) ID(ctx context.Context, obj *model.Shop) (string, error) {
 	// Return the base64-encoded ID
 	return EncodeRelayID("Category", obj.ID), nil
+}
+
+// Products is the resolver for the products field.
+func (r *shopResolver) Products(ctx context.Context, obj *model.Shop, first *int, after *string) (*model.ProductConnection, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	limit := 20
+	if first != nil {
+		limit = *first
+	}
+	afterID := int64(0)
+	if after != nil {
+		decodedType, id, err := DecodeRelayID(*after)
+		if err != nil {
+			return nil, fmt.Errorf("invalid after cursor: %w", err)
+		}
+		if decodedType != "Product" {
+			return nil, fmt.Errorf("expected after cursor type 'Product', got '%s'", decodedType)
+		}
+		if id != nil {
+			afterID = *id
+		}
+	}
+	productsDB, err := r.Repository.GetProducts(ctx, db.GetProductsParams{ShopID: shopID, After: afterID, Limit: int32(limit) + 1})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch products: %w", err)
+	}
+	hasNextPage := len(productsDB) > limit
+	if hasNextPage {
+		productsDB = productsDB[:limit]
+	}
+	edges := make([]model.ProductEdge, len(productsDB))
+	for i, prod := range productsDB {
+		relayID := EncodeRelayID("Product", strconv.FormatInt(prod.ProductID, 10))
+		edges[i] = model.ProductEdge{Cursor: relayID, Node: &model.Product{
+			ID:          strconv.FormatInt(prod.ProductID, 10),
+			Title:       prod.Title,
+			Description: prod.Description,
+			CreatedAt:   prod.CreatedAt.Time,
+			UpdatedAt:   prod.UpdatedAt.Time,
+			Status:      (*model.ProductStatus)(&prod.Status),
+		}}
+	}
+	var startCursor, endCursor *string
+	if len(productsDB) > 0 {
+		firstCursor := EncodeRelayID("Product", strconv.FormatInt(productsDB[0].ProductID, 10))
+		lastCursor := EncodeRelayID("Product", strconv.FormatInt(productsDB[len(productsDB)-1].ProductID, 10))
+		startCursor, endCursor = &firstCursor, &lastCursor
+	}
+
+	pageInfo := &model.PageInfo{
+		HasNextPage: hasNextPage,
+		StartCursor: safeStringDereference(startCursor),
+		EndCursor:   safeStringDereference(endCursor),
+	}
+
+	return &model.ProductConnection{
+		Edges:      edges,
+		PageInfo:   pageInfo,
+		TotalCount: len(productsDB),
+	}, nil
+}
+
+// Categories is the resolver for the categories field.
+func (r *shopResolver) Categories(ctx context.Context, obj *model.Shop, first *int, after *string) (*model.CategoryConnection, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	limit := 20
+	if first != nil {
+		limit = *first
+	}
+	afterID := int64(0)
+	if after != nil {
+		decodedType, id, err := DecodeRelayID(*after)
+		if err != nil {
+			return nil, fmt.Errorf("invalid after cursor: %w", err)
+		}
+		if decodedType != "Category" {
+			return nil, fmt.Errorf("expected after cursor type 'Category', got '%s'", decodedType)
+		}
+		if id != nil {
+			afterID = *id
+		}
+	}
+	categoriesDB, err := r.Repository.GetCategories(ctx, db.GetCategoriesParams{ShopID: shopID, After: afterID, Limit: int32(limit) + 1})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch categories: %w", err)
+	}
+	hasNextPage := len(categoriesDB) > limit
+	if hasNextPage {
+		categoriesDB = categoriesDB[:limit]
+	}
+	edges := make([]model.CategoryEdge, len(categoriesDB))
+	for i, cat := range categoriesDB {
+		relayID := EncodeRelayID("Category", strconv.FormatInt(cat.CategoryID, 10))
+		edges[i] = model.CategoryEdge{Cursor: relayID, Node: &model.Category{
+			ID:          strconv.FormatInt(cat.CategoryID, 10),
+			Slug:        cat.Slug,
+			Title:       cat.Title,
+			Description: cat.Description.String,
+			CreatedAt:   cat.CreatedAt.Time,
+			UpdatedAt:   cat.UpdatedAt.Time,
+		}}
+	}
+	var startCursor, endCursor *string
+	if len(categoriesDB) > 0 {
+		firstCursor := EncodeRelayID("Category", strconv.FormatInt(categoriesDB[0].CategoryID, 10))
+		lastCursor := EncodeRelayID("Category", strconv.FormatInt(categoriesDB[len(categoriesDB)-1].CategoryID, 10))
+		startCursor, endCursor = &firstCursor, &lastCursor
+	}
+
+	pageInfo := &model.PageInfo{
+		HasNextPage: hasNextPage,
+		StartCursor: safeStringDereference(startCursor),
+		EndCursor:   safeStringDereference(endCursor),
+	}
+
+	// Return the CategoryConnection result
+	return &model.CategoryConnection{
+		Edges:      edges,
+		PageInfo:   pageInfo,
+		TotalCount: len(categoriesDB),
+	}, nil
+}
+
+// WhatsApp is the resolver for the whatsApp field.
+func (r *shopResolver) WhatsApp(ctx context.Context, obj *model.Shop) (*model.WhatsApp, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	whatsappDB, err := r.Repository.GetShopWhatsApp(ctx, shopID)
+	if err != nil {
+		return &model.WhatsApp{URL: nil, PhoneNumber: nil}, nil
+	}
+	return &model.WhatsApp{
+		PhoneNumber: &model.PhoneNumber{E164: whatsappDB.PhoneNumber},
+		URL:         &whatsappDB.Url,
+	}, nil
+}
+
+// Facebook is the resolver for the facebook field.
+func (r *shopResolver) Facebook(ctx context.Context, obj *model.Shop) (*model.Facebook, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	facebookDB, err := r.Repository.GetShopFacebook(ctx, shopID)
+	if err != nil {
+		return &model.Facebook{URL: nil, Handle: nil}, nil
+	}
+	return &model.Facebook{
+		Handle: &facebookDB.Handle,
+		URL:    &facebookDB.Url,
+	}, nil
+}
+
+// Images is the resolver for the images field.
+func (r *shopResolver) Images(ctx context.Context, obj *model.Shop) (*model.ShopImages, error) {
+	shopID := ctx.Value("shop_id").(int64)
+	imagesDB, err := r.Repository.GetShopImages(ctx, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("internal server error %w", err)
+	}
+	return &model.ShopImages{
+		SiteLogo:   &model.Image{URL: imagesDB.LogoUrl.String, AltText: nil},
+		Favicon:    &model.Image{URL: imagesDB.FaviconUrl.String, AltText: nil},
+		Banner:     &model.Image{URL: imagesDB.BannerUrl.String, AltText: nil},
+		CoverImage: &model.Image{URL: imagesDB.CoverImageUrl.String, AltText: nil},
+	}, nil
 }
 
 // Shop returns generated.ShopResolver implementation.
