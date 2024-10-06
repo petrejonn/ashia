@@ -25,6 +25,10 @@ type CreateProductPayload interface {
 	IsCreateProductPayload()
 }
 
+type CreateProductVariantPayload interface {
+	IsCreateProductVariantPayload()
+}
+
 type CreateShopPayload interface {
 	IsCreateShopPayload()
 }
@@ -96,7 +100,7 @@ type Category struct {
 	ID                string                      `json:"id"`
 	Slug              string                      `json:"slug"`
 	Title             string                      `json:"title"`
-	Description       string                      `json:"description"`
+	Description       *string                     `json:"description,omitempty"`
 	Children          []Category                  `json:"children,omitempty"`
 	Products          *ProductConnection          `json:"products,omitempty"`
 	AllowedAttributes []AllowedCategoryAttributes `json:"allowedAttributes"`
@@ -165,7 +169,7 @@ func (CreateCategoryAttributeSuccess) IsCreateCategoryAttributePayload() {}
 type CreateCategoryInput struct {
 	ParentID    *string `json:"parentID,omitempty"`
 	Title       string  `json:"title"`
-	Description string  `json:"description"`
+	Description *string `json:"description,omitempty"`
 }
 
 type CreateCategorySuccess struct {
@@ -196,6 +200,19 @@ type CreateProductSuccess struct {
 }
 
 func (CreateProductSuccess) IsCreateProductPayload() {}
+
+type CreateProductVariantInput struct {
+	Price             float64                      `json:"price"`
+	AvailableQuantity int                          `json:"availableQuantity"`
+	Attributes        []ProductAttributeValueInput `json:"attributes,omitempty"`
+	StockStatus       ProductStockStatus           `json:"stockStatus"`
+}
+
+type CreateProductVariantSuccess struct {
+	Variants []ProductVariant `json:"variants"`
+}
+
+func (CreateProductVariantSuccess) IsCreateProductVariantPayload() {}
 
 type CreateShopInput struct {
 	Title  string `json:"title"`
@@ -290,6 +307,11 @@ type ProductAttributeValue struct {
 	StringValue *string `json:"stringValue,omitempty"`
 }
 
+type ProductAttributeValueInput struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type ProductConnection struct {
 	Edges      []ProductEdge `json:"edges"`
 	PageInfo   *PageInfo     `json:"pageInfo"`
@@ -327,10 +349,11 @@ func (ProductNotFoundError) IsCreateProductAttributePayload() {}
 
 func (ProductNotFoundError) IsDeleteProductAttributePayload() {}
 
+func (ProductNotFoundError) IsCreateProductVariantPayload() {}
+
 type ProductVariant struct {
 	ID                string             `json:"id"`
 	Slug              string             `json:"slug"`
-	Title             string             `json:"title"`
 	Price             float64            `json:"price"`
 	AvailableQuantity int                `json:"availableQuantity"`
 	Description       string             `json:"description"`
@@ -432,7 +455,6 @@ func (UpdateCategorySuccess) IsUpdateCategoryPayload() {}
 type UpdateProductInput struct {
 	Title       *string `json:"title,omitempty"`
 	Description *string `json:"description,omitempty"`
-	CategoryID  *string `json:"categoryID,omitempty"`
 }
 
 type UpdateProductSuccess struct {

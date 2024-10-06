@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/petrejonn/naytife/internal/db"
 	"github.com/petrejonn/naytife/internal/graph/generated"
 	"github.com/petrejonn/naytife/internal/graph/model"
@@ -22,12 +21,10 @@ func (r *mutationResolver) SignInUser(ctx context.Context, input model.SignInInp
 	fakeUrl := "https://fake-url.com/profile-picture.png"
 	// Check if the user exists in the database
 	user, err := r.Repository.UpsertUser(ctx, db.UpsertUserParams{
-		Auth0Sub: pgtype.Text{String: fakeAuthSub, Valid: true},
-		Email:    fakeEmail,
-		Name: pgtype.Text{
-			String: fakeName,
-			Valid:  true},
-		ProfilePictureUrl: pgtype.Text{String: fakeUrl, Valid: true},
+		Auth0Sub:          &fakeAuthSub,
+		Email:             fakeEmail,
+		Name:              &fakeName,
+		ProfilePictureUrl: &fakeUrl,
 	})
 	if err != nil {
 		return nil, errors.New("user not found")
@@ -37,15 +34,15 @@ func (r *mutationResolver) SignInUser(ctx context.Context, input model.SignInInp
 		User: &model.User{
 			ID:                user.UserID.String(),
 			Email:             user.Email,
-			Name:              &user.Name.String,
-			ProfilePictureURL: &user.ProfilePictureUrl.String,
+			Name:              user.Name,
+			ProfilePictureURL: user.ProfilePictureUrl,
 		},
 	}, nil
 }
 
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id string) (model.Node, error) {
-	typ, _, err := DecodeRelayID(id)
+	typ, _, err := decodeRelayID(id)
 	if err != nil {
 		return nil, err
 	}

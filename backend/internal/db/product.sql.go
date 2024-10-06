@@ -18,12 +18,12 @@ RETURNING product_id, title, description, allowed_attributes, created_at, update
 `
 
 type CreateProductParams struct {
-	Title             string
-	Description       string
-	CategoryID        int64
-	ShopID            int64
-	AllowedAttributes []byte
-	Status            string
+	Title             string `json:"title"`
+	Description       string `json:"description"`
+	CategoryID        int64  `json:"category_id"`
+	ShopID            int64  `json:"shop_id"`
+	AllowedAttributes []byte `json:"allowed_attributes"`
+	Status            string `json:"status"`
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -50,6 +50,49 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 	return i, err
 }
 
+const createProductAllowedAttribute = `-- name: CreateProductAllowedAttribute :one
+UPDATE products
+SET allowed_attributes = jsonb_set(
+    COALESCE(allowed_attributes, '{}'), 
+    ARRAY[UPPER($1)::text], 
+    to_jsonb($2::text)
+)
+WHERE product_id = $3
+RETURNING allowed_attributes
+`
+
+type CreateProductAllowedAttributeParams struct {
+	Title     interface{} `json:"title"`
+	DataType  string      `json:"data_type"`
+	ProductID int64       `json:"product_id"`
+}
+
+func (q *Queries) CreateProductAllowedAttribute(ctx context.Context, arg CreateProductAllowedAttributeParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, createProductAllowedAttribute, arg.Title, arg.DataType, arg.ProductID)
+	var allowed_attributes []byte
+	err := row.Scan(&allowed_attributes)
+	return allowed_attributes, err
+}
+
+const deleteProductAllowedAttribute = `-- name: DeleteProductAllowedAttribute :one
+UPDATE products
+SET allowed_attributes = allowed_attributes - UPPER($1::text)
+WHERE product_id = $2
+RETURNING allowed_attributes
+`
+
+type DeleteProductAllowedAttributeParams struct {
+	Attribute string `json:"attribute"`
+	ProductID int64  `json:"product_id"`
+}
+
+func (q *Queries) DeleteProductAllowedAttribute(ctx context.Context, arg DeleteProductAllowedAttributeParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, deleteProductAllowedAttribute, arg.Attribute, arg.ProductID)
+	var allowed_attributes []byte
+	err := row.Scan(&allowed_attributes)
+	return allowed_attributes, err
+}
+
 const getProduct = `-- name: GetProduct :one
 SELECT product_id, title, description, created_at, updated_at, status, category_id
 FROM products
@@ -57,18 +100,18 @@ WHERE shop_id = $1 AND product_id = $2
 `
 
 type GetProductParams struct {
-	ShopID    int64
-	ProductID int64
+	ShopID    int64 `json:"shop_id"`
+	ProductID int64 `json:"product_id"`
 }
 
 type GetProductRow struct {
-	ProductID   int64
-	Title       string
-	Description string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	Status      string
-	CategoryID  int64
+	ProductID   int64              `json:"product_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Status      string             `json:"status"`
+	CategoryID  int64              `json:"category_id"`
 }
 
 func (q *Queries) GetProduct(ctx context.Context, arg GetProductParams) (GetProductRow, error) {
@@ -99,6 +142,51 @@ func (q *Queries) GetProductAllowedAttributes(ctx context.Context, productID int
 	return allowed_attributes, err
 }
 
+const getProductVariations = `-- name: GetProductVariations :many
+SELECT product_variation_id, slug, description, price, available_quantity, attributes, seo_description, seo_keywords, seo_title, created_at, updated_at, product_id, shop_id FROM product_variations
+WHERE shop_id = $1 AND product_id = $2
+ORDER BY product_variation_id
+`
+
+type GetProductVariationsParams struct {
+	ShopID    int64 `json:"shop_id"`
+	ProductID int64 `json:"product_id"`
+}
+
+func (q *Queries) GetProductVariations(ctx context.Context, arg GetProductVariationsParams) ([]ProductVariation, error) {
+	rows, err := q.db.Query(ctx, getProductVariations, arg.ShopID, arg.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProductVariation
+	for rows.Next() {
+		var i ProductVariation
+		if err := rows.Scan(
+			&i.ProductVariationID,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.AvailableQuantity,
+			&i.Attributes,
+			&i.SeoDescription,
+			&i.SeoKeywords,
+			&i.SeoTitle,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ProductID,
+			&i.ShopID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getProducts = `-- name: GetProducts :many
 SELECT product_id, title, description, created_at, updated_at, status, category_id
 FROM products
@@ -107,19 +195,19 @@ LIMIT $3
 `
 
 type GetProductsParams struct {
-	ShopID int64
-	After  int64
-	Limit  int32
+	ShopID int64 `json:"shop_id"`
+	After  int64 `json:"after"`
+	Limit  int32 `json:"limit"`
 }
 
 type GetProductsRow struct {
-	ProductID   int64
-	Title       string
-	Description string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	Status      string
-	CategoryID  int64
+	ProductID   int64              `json:"product_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Status      string             `json:"status"`
+	CategoryID  int64              `json:"category_id"`
 }
 
 func (q *Queries) GetProducts(ctx context.Context, arg GetProductsParams) ([]GetProductsRow, error) {
@@ -158,19 +246,19 @@ LIMIT $3
 `
 
 type GetProductsByCategoryParams struct {
-	CategoryID int64
-	After      int64
-	Limit      int32
+	CategoryID int64 `json:"category_id"`
+	After      int64 `json:"after"`
+	Limit      int32 `json:"limit"`
 }
 
 type GetProductsByCategoryRow struct {
-	ProductID   int64
-	Title       string
-	Description string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	Status      string
-	CategoryID  int64
+	ProductID   int64              `json:"product_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Status      string             `json:"status"`
+	CategoryID  int64              `json:"category_id"`
 }
 
 func (q *Queries) GetProductsByCategory(ctx context.Context, arg GetProductsByCategoryParams) ([]GetProductsByCategoryRow, error) {
@@ -199,4 +287,36 @@ func (q *Queries) GetProductsByCategory(ctx context.Context, arg GetProductsByCa
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET 
+    title = COALESCE($1, title),
+    description = COALESCE($2, description)
+WHERE product_id = $3
+RETURNING product_id, title, description, allowed_attributes, created_at, updated_at, status, category_id, shop_id
+`
+
+type UpdateProductParams struct {
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	ProductID   int64   `json:"product_id"`
+}
+
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, updateProduct, arg.Title, arg.Description, arg.ProductID)
+	var i Product
+	err := row.Scan(
+		&i.ProductID,
+		&i.Title,
+		&i.Description,
+		&i.AllowedAttributes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Status,
+		&i.CategoryID,
+		&i.ShopID,
+	)
+	return i, err
 }
